@@ -177,7 +177,7 @@
   .section-title { font-size: 11px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: var(--muted); margin: 18px 0 8px; }
   .stack { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .custom { display: flex; gap: 8px; }
-  .custom input, .field input {
+  .custom input, .field input, .field select {
     flex: 1; min-width: 0; background: var(--panel); border: 1px solid var(--line);
     color: var(--text); padding: 9px 10px; border-radius: 8px;
   }
@@ -219,8 +219,8 @@
     <div class="panel-head">Run of Show <span id="rosCount"></span></div>
     <ul class="ros" id="ros"></ul>
     <div class="ros-actions">
-      <button class="btn small" id="loadBtn" title="Move QLab's playhead to the selected segment without firing it">Load selected</button>
-      <button class="btn small resume" id="jumpGoBtn" title="Move playhead and fire immediately">Jump &amp; GO</button>
+      <button class="btn small" id="loadBtn" title="Make the selected segment the next one GO will fire (sends nothing)">Set as Next</button>
+      <button class="btn small resume" id="jumpGoBtn" title="Fire the selected segment right now">Jump &amp; GO</button>
     </div>
   </section>
 
@@ -287,7 +287,7 @@
 
       <div class="section-title">Fire Any Cue</div>
       <div class="custom">
-        <input id="customCue" placeholder="Cue number, e.g. 12" autocomplete="off">
+        <input id="customCue" placeholder="MIDI note 0–127, e.g. 40" inputmode="numeric" autocomplete="off">
         <button class="btn small resume" id="customFire">Fire</button>
       </div>
 
@@ -301,17 +301,21 @@
 
 <!-- ============ SETTINGS ============ -->
 <dialog id="settings">
-  <div class="panel-head">Connection Settings</div>
+  <div class="panel-head">MIDI Settings</div>
   <div class="panel-body">
     <div class="field">
-      <label for="bridgeUrl">Bridge address (the computer running bridge.js)</label>
-      <input id="bridgeUrl" placeholder="http://localhost:8080">
+      <label for="midiOut">MIDI output (on the QLab Mac choose "IAC Driver Bus 1")</label>
+      <select id="midiOut"><option value="">No MIDI outputs found</option></select>
     </div>
     <div class="field">
-      <label class="row"><input type="checkbox" id="simMode"> Simulation mode (log only, nothing sent to QLab)</label>
+      <label for="midiCh">MIDI channel (must match the channel in QLab)</label>
+      <select id="midiCh"></select>
+    </div>
+    <div class="field">
+      <label class="row"><input type="checkbox" id="simMode"> Simulation mode (log only, no MIDI sent)</label>
     </div>
     <div class="row" style="justify-content:flex-end">
-      <button class="btn small" id="testBtn">Test connection</button>
+      <button class="btn small" id="refreshPorts">Refresh ports</button>
       <button class="btn small resume" id="saveSettings">Save</button>
     </div>
   </div>
@@ -320,131 +324,155 @@
 <script>
 /* =====================================================================
    1. CONFIGURATION — edit this section to match your QLab workspace
+   Every button sends a MIDI "Note On" (velocity 127) followed by a
+   Note Off 100 ms later. In QLab, give each cue a MIDI trigger with the
+   same note number (Cue Inspector → Triggers → MIDI Trigger).
    ===================================================================== */
 
-// Run of show. "cue" = the QLab cue NUMBER that starts that segment.
+// Run of show. "note" = the MIDI note that fires that segment's cue
+// (make each segment a Group cue in QLab and give it this MIDI trigger).
 const SHOW = [
-  { time: "7:00", title: "Welcome Speech",                         type: "speech",   mins: 2,  cue: "1" },
-  { time: "7:03", title: "Opening Performance",                    type: "perform",  mins: 5,  cue: "2",  photo: true },
-  { time: "7:08", title: "Induction Ceremony & Pledge",            type: "ceremony", mins: 7,  cue: "3",  photo: true },
-  { time: "7:15", title: "Opera Performance",                      type: "perform",  mins: 5,  cue: "4",  photo: true },
-  { time: "7:20", title: "Bronze Certificates",                    type: "award",    mins: 5,  cue: "5",  photo: true },
-  { time: "7:25", title: "Duologue – Hard Candy",                  type: "perform",  mins: 5,  cue: "6" },
-  { time: "7:30", title: "Silver Certificates",                    type: "award",    mins: 5,  cue: "7",  photo: true },
-  { time: "7:35", title: "Group Scene – Buried Child",             type: "perform",  mins: 5,  cue: "8",  photo: true },
-  { time: "7:40", title: "Gold Certificates",                      type: "award",    mins: 5,  cue: "9",  photo: true },
-  { time: "7:45", title: "Musical Theatre Duo",                    type: "perform",  mins: 5,  cue: "10", photo: true },
-  { time: "7:50", title: "Diamond Certificate",                    type: "award",    mins: 3,  cue: "11", photo: true },
-  { time: "7:53", title: "Special Recognition Awards 25-26",       type: "award",    mins: 5,  cue: "12", photo: true },
-  { time: "8:00", title: "\"Rise A Long Life Thespian\" Alumni Video", type: "video", mins: 5,  cue: "13" },
-  { time: "8:05", title: "Knighting Ceremony – Senior Honors",     type: "ceremony", mins: 10, cue: "14" },
-  { time: "8:15", title: "Musical Theater Song – Hamilton",        type: "perform",  mins: 5,  cue: "15", photo: true },
-  { time: "8:20", title: "Thank You, Troupe Photos & Dismissal",   type: "speech",   mins: 3,  cue: "16", photo: true },
+  { time: "7:00", title: "Welcome Speech",                         type: "speech",   mins: 2,  note: 36 },
+  { time: "7:03", title: "Opening Performance",                    type: "perform",  mins: 5,  note: 37, photo: true },
+  { time: "7:08", title: "Induction Ceremony & Pledge",            type: "ceremony", mins: 7,  note: 38, photo: true },
+  { time: "7:15", title: "Opera Performance",                      type: "perform",  mins: 5,  note: 39, photo: true },
+  { time: "7:20", title: "Bronze Certificates",                    type: "award",    mins: 5,  note: 40, photo: true },
+  { time: "7:25", title: "Duologue – Hard Candy",                  type: "perform",  mins: 5,  note: 41 },
+  { time: "7:30", title: "Silver Certificates",                    type: "award",    mins: 5,  note: 42, photo: true },
+  { time: "7:35", title: "Group Scene – Buried Child",             type: "perform",  mins: 5,  note: 43, photo: true },
+  { time: "7:40", title: "Gold Certificates",                      type: "award",    mins: 5,  note: 44, photo: true },
+  { time: "7:45", title: "Musical Theatre Duo",                    type: "perform",  mins: 5,  note: 45, photo: true },
+  { time: "7:50", title: "Diamond Certificate",                    type: "award",    mins: 3,  note: 46, photo: true },
+  { time: "7:53", title: "Special Recognition Awards 25-26",       type: "award",    mins: 5,  note: 47, photo: true },
+  { time: "8:00", title: "\"Rise A Long Life Thespian\" Alumni Video", type: "video", mins: 5,  note: 48 },
+  { time: "8:05", title: "Knighting Ceremony – Senior Honors",     type: "ceremony", mins: 10, note: 49 },
+  { time: "8:15", title: "Musical Theater Song – Hamilton",        type: "perform",  mins: 5,  note: 50, photo: true },
+  { time: "8:20", title: "Thank You, Troupe Photos & Dismissal",   type: "speech",   mins: 3,  note: 51, photo: true },
 ];
 
-// QLab cue numbers for the side buttons. Create these cues in QLab
-// (e.g. a Light cue named SPOT-ON) and type the same number here.
-const CUES = {
-  spotOn:    "SPOT-ON",
-  spotOff:   "SPOT-OFF",
-  micOn:     "MIC-ON",
-  micOff:    "MIC-OFF",
-  houseUp:   "HOUSE-UP",
-  houseDown: "HOUSE-DOWN",
+// Whole-show controls. Assign these in QLab:
+// Workspace Settings → MIDI Controls (Pause all / Resume all / Stop all).
+const TRANSPORT = {
+  pause:  60,
+  resume: 61,
+  stop:   62,
 };
 
-// OSC messages for the transport buttons (QLab workspace-level commands).
-const OSC = {
-  go:       "/go",
-  pause:    "/pause",
-  resume:   "/resume",
-  stop:     "/stop",
-  playhead: (cue) => `/playhead/${cue}`,
-  start:    (cue) => `/cue/${cue}/start`,
+// Side buttons. Create a cue for each in QLab with this MIDI trigger.
+const CUES = {
+  spotOn:    70,
+  spotOff:   71,
+  micOn:     72,
+  micOff:    73,
+  houseUp:   74,
+  houseDown: 75,
 };
 
 const TYPE_LABEL = { speech: "Speech", perform: "Performance", award: "Award", video: "Video", ceremony: "Ceremony" };
+const NOTE_NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+const noteName = (n) => NOTE_NAMES[n % 12] + (Math.floor(n / 12) - 1);
 
 /* =====================================================================
    2. STATE
    ===================================================================== */
 const state = {
   liveIndex: -1,       // segment currently running
+  next: 0,             // segment GO will fire next
   selected: 0,         // segment highlighted in the list
   speakerMode: false,
   showStart: null,
-  settings: { bridgeUrl: "http://localhost:8080", sim: true },
+  settings: { outputName: "", channel: 1, sim: true },
 };
 try {
-  const saved = JSON.parse(localStorage.getItem("stageControlSettings") || "null");
+  const saved = JSON.parse(localStorage.getItem("stageControlMidi") || "null");
   if (saved) Object.assign(state.settings, saved);
 } catch (e) { /* storage unavailable: use defaults */ }
 
 const $ = (id) => document.getElementById(id);
 
 /* =====================================================================
-   3. SENDING SIGNALS
-   The browser can't talk to QLab directly (QLab listens for OSC over
-   UDP/TCP). bridge.js receives these HTTP requests and forwards them
-   to QLab as OSC on port 53000.
+   3. SENDING MIDI  (Web MIDI API — use Chrome or Edge)
    ===================================================================== */
-async function send(address, label) {
-  log(label, address);
-  if (state.settings.sim) return true;
-  try {
-    const res = await fetch(state.settings.bridgeUrl.replace(/\/$/, "") + "/osc", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ address, args: [] }),
-    });
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    setConn("ok");
-    return true;
-  } catch (err) {
-    log("Send failed: " + err.message, address, true);
-    setConn("bad");
-    return false;
+let midiAccess = null;
+let midiOut = null;
+
+async function initMIDI() {
+  if (midiAccess) return refreshPorts();
+  if (!navigator.requestMIDIAccess) {
+    log("This browser can't send MIDI. Use Chrome or Edge.", "—", true);
+    return setConn();
   }
+  try {
+    midiAccess = await navigator.requestMIDIAccess();
+    midiAccess.onstatechange = refreshPorts;
+    refreshPorts();
+  } catch (err) {
+    log("MIDI permission was blocked: " + err.message, "—", true);
+    setConn();
+  }
+}
+
+function refreshPorts() {
+  const sel = $("midiOut");
+  const outs = midiAccess ? [...midiAccess.outputs.values()] : [];
+  sel.innerHTML = outs.length
+    ? outs.map((o) => `<option value="${o.name}">${o.name}</option>`).join("")
+    : `<option value="">No MIDI outputs found</option>`;
+  midiOut =
+    outs.find((o) => o.name === state.settings.outputName) ||
+    outs.find((o) => /IAC/i.test(o.name)) ||
+    outs[0] || null;
+  if (midiOut) sel.value = midiOut.name;
+  setConn();
+}
+
+function send(note, label) {
+  const ch = state.settings.channel;
+  log(label, `Note ${note} (${noteName(note)}) · ch ${ch}`);
+  if (state.settings.sim) return;
+  if (!midiOut) { log("No MIDI output selected — open Settings", "—", true); return; }
+  midiOut.send([0x90 + (ch - 1), note, 127]);                         // Note On
+  midiOut.send([0x80 + (ch - 1), note, 0], performance.now() + 100);  // Note Off
 }
 
 /* =====================================================================
    4. ACTIONS
    ===================================================================== */
-function go() {
+function fireSegment(i, label) {
+  const seg = SHOW[i];
   if (!state.showStart) state.showStart = Date.now();
-  send(OSC.go, "GO");
-  state.liveIndex = Math.min(state.liveIndex + 1, SHOW.length - 1);
-  state.selected = Math.min(state.liveIndex + 1, SHOW.length - 1);
-  $("goBtn").classList.remove("flash"); void $("goBtn").offsetWidth; $("goBtn").classList.add("flash");
+  send(seg.note, label + ": " + seg.title);
+  state.liveIndex = i;
+  state.next = i + 1;
+  state.selected = Math.min(i + 1, SHOW.length - 1);
   render();
 }
-function pauseAll()  { send(OSC.pause,  "Pause all"); }
-function resumeAll() { send(OSC.resume, "Resume all"); }
-function stopAll()   { send(OSC.stop,   "Stop all"); }
+
+function go() {
+  if (state.next >= SHOW.length) return log("End of show — nothing left to GO", "—");
+  fireSegment(state.next, "GO");
+  $("goBtn").classList.remove("flash"); void $("goBtn").offsetWidth; $("goBtn").classList.add("flash");
+}
+function pauseAll()  { send(TRANSPORT.pause,  "Pause all"); }
+function resumeAll() { send(TRANSPORT.resume, "Resume all"); }
+function stopAll()   { send(TRANSPORT.stop,   "Stop all"); }
 
 function restartShow() {
-  if (!confirm("Restart the whole show? This stops everything and returns to the first cue.")) return;
-  send(OSC.stop, "Stop all");
-  send(OSC.playhead(SHOW[0].cue), "Playhead → first cue");
-  state.liveIndex = -1; state.selected = 0; state.showStart = null;
+  if (!confirm("Restart the whole show? This stops everything and the next GO fires the first segment.")) return;
+  stopAll();
+  state.liveIndex = -1; state.next = 0; state.selected = 0; state.showStart = null;
   if (state.speakerMode) toggleSpeaker(false);
   render();
 }
 
-function loadSelected() {
-  const seg = SHOW[state.selected];
-  send(OSC.playhead(seg.cue), "Load: " + seg.title);
-}
-function jumpAndGo() {
-  const seg = SHOW[state.selected];
-  if (!state.showStart) state.showStart = Date.now();
-  send(OSC.start(seg.cue), "Jump & GO: " + seg.title);
-  state.liveIndex = state.selected;
-  state.selected = Math.min(state.selected + 1, SHOW.length - 1);
+function setAsNext() {
+  state.next = state.selected;
+  log("Next GO → " + SHOW[state.next].title, "—");
   render();
 }
+function jumpAndGo() { fireSegment(state.selected, "Jump & GO"); }
 
-function fireCue(key, label) { send(OSC.start(CUES[key]), label); }
+function fireCue(key, label) { send(CUES[key], label); }
 
 // Speaker mode: one button to hold the show for a speaker, one to return.
 function toggleSpeaker(force) {
@@ -474,45 +502,36 @@ function render() {
       <span class="time">${s.time}</span>
       <div>
         <div class="title">${s.title}</div>
-        <div class="meta">Cue ${s.cue} · ${s.mins} min${s.photo ? " · 📷 Photo" : ""}</div>
+        <div class="meta">Note ${s.note} (${noteName(s.note)}) · ${s.mins} min${s.photo ? " · 📷 Photo" : ""}</div>
       </div>
       <span class="tag ${s.type}">${TYPE_LABEL[s.type]}</span>
     </li>`).join("");
   $("rosCount").textContent = `${Math.max(state.liveIndex + 1, 0)} / ${SHOW.length}`;
 
   const now = SHOW[state.liveIndex];
-  const next = SHOW[state.liveIndex + 1];
+  const next = SHOW[state.next];
   $("nowTitle").textContent = now ? now.title : "Standing by";
-  $("nowSub").textContent   = now ? `${now.time} · Cue ${now.cue} · ${now.mins} min` : "Press GO to start the show";
-  $("nextTitle").textContent = next ? next.title : (now ? "End of show" : SHOW[0].title);
-  $("nextSub").textContent   = next ? `${next.time} · Cue ${next.cue}` : "";
+  $("nowSub").textContent   = now ? `${now.time} · Note ${now.note} · ${now.mins} min` : "Press GO to start the show";
+  $("nextTitle").textContent = next ? next.title : "End of show";
+  $("nextSub").textContent   = next ? `${next.time} · Note ${next.note}` : "";
 
   const liveEl = document.querySelector(".ros li.live");
   if (liveEl) liveEl.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 
-function log(label, address, isErr) {
+function log(label, detail, isErr) {
   const t = new Date().toLocaleTimeString([], { hour12: false });
   const row = document.createElement("div");
-  row.innerHTML = `<span class="ts">${t}</span><span class="${isErr ? "err" : ""}">${label}</span><span class="addr">${address}</span>`;
+  row.innerHTML = `<span class="ts">${t}</span><span class="${isErr ? "err" : ""}">${label}</span><span class="addr">${detail}</span>`;
   $("log").prepend(row);
 }
 
-function setConn(status) {
+function setConn() {
   const dot = $("connDot"), txt = $("connText");
   dot.className = "dot";
-  if (state.settings.sim) { dot.classList.add("sim"); txt.textContent = "Simulation"; return; }
-  if (status === "ok")  { dot.classList.add("ok");  txt.textContent = "Connected"; }
-  else if (status === "bad") { dot.classList.add("bad"); txt.textContent = "No bridge"; }
-  else { txt.textContent = "Checking…"; }
-}
-
-async function checkBridge() {
-  if (state.settings.sim) return setConn();
-  try {
-    const r = await fetch(state.settings.bridgeUrl.replace(/\/$/, "") + "/health");
-    setConn(r.ok ? "ok" : "bad");
-  } catch { setConn("bad"); }
+  if (state.settings.sim) { dot.classList.add("sim"); txt.textContent = "Simulation"; }
+  else if (midiOut)       { dot.classList.add("ok");  txt.textContent = "MIDI · " + midiOut.name; }
+  else                    { dot.classList.add("bad"); txt.textContent = "No MIDI output"; }
 }
 
 function tick() {
@@ -531,7 +550,7 @@ $("pauseBtn").onclick = pauseAll;
 $("resumeBtn").onclick = resumeAll;
 $("stopBtn").onclick = stopAll;
 $("restartBtn").onclick = restartShow;
-$("loadBtn").onclick = loadSelected;
+$("loadBtn").onclick = setAsNext;
 $("jumpGoBtn").onclick = jumpAndGo;
 $("interruptBtn").onclick = () => toggleSpeaker();
 $("spotOn").onclick   = () => fireCue("spotOn", "Podium spot ON");
@@ -541,8 +560,9 @@ $("micOff").onclick   = () => fireCue("micOff", "Podium mic OFF");
 $("houseUp").onclick  = () => fireCue("houseUp", "House lights UP");
 $("houseDown").onclick= () => fireCue("houseDown", "House lights DOWN");
 $("customFire").onclick = () => {
-  const c = $("customCue").value.trim();
-  if (c) send(OSC.start(c), "Fire cue " + c);
+  const n = parseInt($("customCue").value, 10);
+  if (n >= 0 && n <= 127) send(n, "Fire note " + n);
+  else log("Enter a note number from 0 to 127", "—", true);
 };
 $("customCue").addEventListener("keydown", (e) => { if (e.key === "Enter") $("customFire").click(); });
 $("clearLog").onclick = () => { $("log").innerHTML = ""; };
@@ -552,30 +572,28 @@ $("ros").addEventListener("click", (e) => {
 });
 
 // Settings
+$("midiCh").innerHTML = Array.from({ length: 16 }, (_, i) => `<option value="${i + 1}">Channel ${i + 1}</option>`).join("");
 $("settingsBtn").onclick = () => {
-  $("bridgeUrl").value = state.settings.bridgeUrl;
+  $("midiCh").value = state.settings.channel;
   $("simMode").checked = state.settings.sim;
   $("settings").showModal();
+  initMIDI();
 };
+$("refreshPorts").onclick = initMIDI;
 $("saveSettings").onclick = () => {
-  state.settings.bridgeUrl = $("bridgeUrl").value.trim() || "http://localhost:8080";
+  state.settings.outputName = $("midiOut").value;
+  state.settings.channel = +$("midiCh").value;
   state.settings.sim = $("simMode").checked;
-  try { localStorage.setItem("stageControlSettings", JSON.stringify(state.settings)); } catch (e) {}
+  try { localStorage.setItem("stageControlMidi", JSON.stringify(state.settings)); } catch (e) {}
+  if (midiAccess) refreshPorts();
   $("settings").close();
-  log(state.settings.sim ? "Simulation mode ON" : "Live mode → " + state.settings.bridgeUrl, "—");
-  checkBridge();
-};
-$("testBtn").onclick = async () => {
-  const prev = { ...state.settings };
-  state.settings.bridgeUrl = $("bridgeUrl").value.trim(); state.settings.sim = false;
-  await checkBridge();
-  log($("connText").textContent === "Connected" ? "Bridge reachable ✓" : "Bridge not reachable", state.settings.bridgeUrl);
-  Object.assign(state.settings, prev); setConn();
+  log(state.settings.sim ? "Simulation mode ON" : `Live MIDI → ${state.settings.outputName || "(none)"}, ch ${state.settings.channel}`, "—");
+  setConn();
 };
 
 // Keyboard shortcuts (ignored while typing in a box)
 document.addEventListener("keydown", (e) => {
-  if (e.target.tagName === "INPUT" || $("settings").open) return;
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT" || $("settings").open) return;
   const k = e.key.toLowerCase();
   if (k === " ")      { e.preventDefault(); go(); }
   else if (k === "p") pauseAll();
@@ -586,7 +604,8 @@ document.addEventListener("keydown", (e) => {
 
 render();
 tick(); setInterval(tick, 1000);
-setConn(); checkBridge(); setInterval(checkBridge, 5000);
+setConn();
+if (!state.settings.sim) initMIDI();
 log("Control panel ready" + (state.settings.sim ? " (simulation mode)" : ""), "—");
 </script>
 </body>
