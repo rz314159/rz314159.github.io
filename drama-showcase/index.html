@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Showcase Stage Control</title>
+<style>
+  /* ============ THEME ============ */
+  :root {
+    --bg: #f7f8fb;
+    --panel: #ffffff;
+    --panel-2: #f2f4f8;
+    --line: #e4e7ee;
+    --text: #1d2433;
+    --muted: #6b7385;
+    --go: #16a34a;
+    --pause: #d97706;
+    --stop: #dc2626;
+    --spot: #b45309;
+    --spot-fill: #fef3c7;
+    --accent: #2563eb;
+    --shadow: 0 1px 2px rgba(16,24,40,.04), 0 2px 8px rgba(16,24,40,.04);
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
+  button { font: inherit; color: inherit; cursor: pointer; border: none; }
+  input { font: inherit; }
+
+  /* ============ HEADER ============ */
+  header {
+    display: flex; align-items: center; gap: 16px;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel);
+  }
+  .brand { font-weight: 700; font-size: 17px; letter-spacing: .2px; }
+  .brand span { color: var(--muted); font-weight: 500; }
+  .spacer { flex: 1; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 12px; border-radius: 999px;
+    background: var(--panel-2); border: 1px solid var(--line);
+    font-size: 12px; color: var(--muted);
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .dot.ok { background: var(--go); box-shadow: 0 0 8px var(--go); }
+  .dot.sim { background: var(--pause); }
+  .dot.bad { background: var(--stop); }
+  .clock { font-variant-numeric: tabular-nums; font-size: 20px; font-weight: 600; }
+  .icon-btn {
+    background: var(--panel-2); border: 1px solid var(--line);
+    padding: 7px 12px; border-radius: 8px; color: var(--muted);
+  }
+  .icon-btn:hover { color: var(--text); }
+
+  /* ============ LAYOUT ============ */
+  main {
+    display: grid;
+    grid-template-columns: 340px 1fr 320px;
+    gap: 16px;
+    padding: 16px 20px;
+    height: calc(100% - 59px);
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    display: flex; flex-direction: column;
+    min-height: 0;
+  }
+  .panel-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; border-bottom: 1px solid var(--line);
+    font-size: 12px; font-weight: 700; letter-spacing: .8px;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .panel-body { padding: 14px 16px; overflow: auto; }
+  .center { display: flex; flex-direction: column; gap: 16px; min-height: 0; }
+
+  /* ============ RUN OF SHOW ============ */
+  .ros { list-style: none; margin: 0; padding: 6px; overflow: auto; flex: 1; }
+  .ros li {
+    display: grid; grid-template-columns: 52px 1fr auto;
+    gap: 10px; align-items: center;
+    padding: 9px 10px; border-radius: 8px;
+    cursor: pointer; border: 1px solid transparent;
+  }
+  .ros li:hover { background: var(--panel-2); }
+  .ros li.selected { border-color: var(--accent); }
+  .ros li.live { background: #ecfdf3; border-color: var(--go); }
+  .ros li.done { opacity: .45; }
+  .ros .time { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; }
+  .ros .title { line-height: 1.3; }
+  .ros .meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .tag {
+    font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 999px;
+    text-transform: uppercase; letter-spacing: .5px; white-space: nowrap;
+  }
+  .tag.speech { background: #e0ecff; color: #1d4ed8; }
+  .tag.perform { background: #efe9ff; color: #6d28d9; }
+  .tag.award { background: #fef3c7; color: #a16207; }
+  .tag.video { background: #dcfce7; color: #047857; }
+  .tag.ceremony { background: #fee2e2; color: #b91c1c; }
+  .ros-actions { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--line); }
+  .ros-actions button { flex: 1; }
+
+  /* ============ NOW / NEXT ============ */
+  .nownext { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); }
+  .card .label { font-size: 11px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: var(--muted); }
+  .card .big { font-size: 20px; font-weight: 600; margin-top: 6px; line-height: 1.25; }
+  .card .sub { color: var(--muted); margin-top: 4px; font-size: 13px; }
+  .card.now { border-left: 4px solid var(--go); }
+  .card.next { border-left: 4px solid var(--accent); }
+
+  /* ============ TRANSPORT ============ */
+  .transport { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; }
+  .go-btn {
+    background: var(--go); color: #ffffff;
+    border-radius: var(--radius); font-size: 44px; font-weight: 800; letter-spacing: 4px;
+    min-height: 170px;
+    box-shadow: 0 4px 14px rgba(22,163,74,.25);
+    transition: transform .06s, filter .15s;
+  }
+  .go-btn small { display: block; font-size: 12px; letter-spacing: 1px; font-weight: 600; opacity: .7; margin-top: 4px; }
+  .go-btn:hover { filter: brightness(1.08); }
+  .go-btn:active, .btn:active { transform: scale(.98); }
+  .go-btn.flash { animation: flash .4s; }
+  @keyframes flash { from { box-shadow: 0 0 0 12px rgba(22,163,74,.35); } to { box-shadow: 0 0 0 0 rgba(22,163,74,0); } }
+  .t-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .btn {
+    background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 10px; padding: 14px 10px; font-weight: 600;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    transition: transform .06s, background .15s;
+  }
+  .btn:hover { background: #e9edf4; }
+  .btn .k { font-size: 10px; color: var(--muted); font-weight: 500; }
+  .btn.pause { border-color: var(--pause); color: var(--pause); }
+  .btn.resume { border-color: var(--go); color: var(--go); }
+  .btn.stop { border-color: var(--stop); color: var(--stop); }
+  .btn.reset { border-color: var(--accent); color: var(--accent); }
+  .btn.small { padding: 9px 10px; font-size: 13px; }
+  .btn.active { background: var(--spot-fill); border-color: var(--spot); color: var(--spot); }
+
+  /* ============ LOG ============ */
+  .log-panel { flex: 1; min-height: 140px; }
+  .log { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; padding: 10px 16px; overflow: auto; flex: 1; }
+  .log div { padding: 3px 0; border-bottom: 1px dashed #eceff4; display: flex; gap: 10px; }
+  .log .ts { color: var(--muted); }
+  .log .addr { color: var(--accent); }
+  .log .err { color: var(--stop); }
+
+  /* ============ SPEAKER PANEL ============ */
+  .interrupt {
+    width: 100%; border-radius: var(--radius);
+    padding: 20px 14px; text-align: center;
+    background: #fffbeb; border: 2px dashed #f59e0b;
+    color: var(--spot); font-weight: 700; font-size: 16px;
+  }
+  .interrupt small { display: block; font-weight: 500; font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .interrupt.on {
+    background: #fde68a; color: #422006; border-style: solid; border-color: #f59e0b;
+    box-shadow: 0 0 24px rgba(245,158,11,.35);
+  }
+  .interrupt.on small { color: #713f12; }
+  .section-desc { font-size: 11.5px; color: var(--muted); margin: -4px 0 8px; line-height: 1.4; }
+  .section-title { font-size: 11px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: var(--muted); margin: 18px 0 8px; }
+  .stack { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .custom { display: flex; gap: 8px; }
+  .custom input, .field input {
+    flex: 1; min-width: 0; background: var(--panel); border: 1px solid var(--line);
+    color: var(--text); padding: 9px 10px; border-radius: 8px;
+  }
+  .hint { color: var(--muted); font-size: 12px; line-height: 1.5; margin-top: 14px; }
+  kbd { background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; font-size: 11px; }
+
+  /* ============ SETTINGS DIALOG ============ */
+  dialog {
+    background: var(--panel); color: var(--text);
+    border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 0; width: min(440px, 92vw);
+  }
+  dialog::backdrop { background: rgba(20,30,50,.35); }
+  .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+  .field label { font-size: 12px; color: var(--muted); }
+  .row { display: flex; align-items: center; gap: 10px; }
+
+  /* ============ RESPONSIVE ============ */
+  @media (max-width: 1100px) {
+    main { grid-template-columns: 1fr; height: auto; }
+    .ros { max-height: 360px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">Drama Showcase <span>· Stage Control</span></div>
+  <div class="spacer"></div>
+  <div class="pill" title="Show elapsed time (starts on first GO)">Show <b id="elapsed" style="color:var(--text)">00:00</b></div>
+  <div class="pill"><span class="dot" id="connDot"></span><span id="connText">Simulation</span></div>
+  <div class="clock" id="clock">--:--:--</div>
+  <button class="icon-btn" id="settingsBtn">⚙ Settings</button>
+</header>
+
+<main>
+  <!-- ============ LEFT: RUN OF SHOW ============ -->
+  <section class="panel">
+    <div class="panel-head">Run of Show <span id="rosCount"></span></div>
+    <ul class="ros" id="ros"></ul>
+    <div class="ros-actions">
+      <button class="btn small" id="loadBtn" title="Move QLab's playhead to the selected segment without firing it">Load selected</button>
+      <button class="btn small resume" id="jumpGoBtn" title="Move playhead and fire immediately">Jump &amp; GO</button>
+    </div>
+  </section>
+
+  <!-- ============ CENTER: TRANSPORT ============ -->
+  <section class="center">
+    <div class="nownext">
+      <div class="card now">
+        <div class="label">Now playing</div>
+        <div class="big" id="nowTitle">Standing by</div>
+        <div class="sub" id="nowSub">Press GO to start the show</div>
+      </div>
+      <div class="card next">
+        <div class="label">Up next</div>
+        <div class="big" id="nextTitle">—</div>
+        <div class="sub" id="nextSub"></div>
+      </div>
+    </div>
+
+    <div class="transport">
+      <button class="go-btn" id="goBtn">GO<small>SPACE</small></button>
+      <div class="t-grid">
+        <button class="btn pause" id="pauseBtn">❚❚ Pause All<span class="k">P</span></button>
+        <button class="btn resume" id="resumeBtn">▶ Resume All<span class="k">R</span></button>
+        <button class="btn stop" id="stopBtn">■ Stop All<span class="k">ESC</span></button>
+        <button class="btn reset" id="restartBtn">↺ Restart Show<span class="k">confirm</span></button>
+      </div>
+    </div>
+
+    <div class="panel log-panel">
+      <div class="panel-head">Signal Log <button class="icon-btn" id="clearLog" style="padding:3px 9px;font-size:11px">Clear</button></div>
+      <div class="log" id="log"></div>
+    </div>
+  </section>
+
+  <!-- ============ RIGHT: SPEAKER / INTERRUPTION ============ -->
+  <section class="panel">
+    <div class="panel-head">Speaker &amp; Podium</div>
+    <div class="panel-body">
+      <button class="interrupt" id="interruptBtn">
+        🎤 SPEAKER TAKES THE PODIUM
+        <small>Pauses show · Podium spot on · Mic on</small>
+      </button>
+
+      <div class="section-title">Podium Spotlight</div>
+      <div class="section-desc">Focused light aimed only at the podium.</div>
+      <div class="stack">
+        <button class="btn small" id="spotOn">Spot ON</button>
+        <button class="btn small" id="spotOff">Spot OFF</button>
+      </div>
+
+      <div class="section-title">Podium Mic</div>
+      <div class="section-desc">Turns the podium microphone channel up or down.</div>
+      <div class="stack">
+        <button class="btn small" id="micOn">Mic ON</button>
+        <button class="btn small" id="micOff">Mic OFF</button>
+      </div>
+
+      <div class="section-title">House Lights (Audience)</div>
+      <div class="section-desc">Lights over the audience seats. Up = bright for walking in and out; Down = dark for the show.</div>
+      <div class="stack">
+        <button class="btn small" id="houseUp">House UP</button>
+        <button class="btn small" id="houseDown">House DOWN</button>
+      </div>
+
+      <div class="section-title">Fire Any Cue</div>
+      <div class="custom">
+        <input id="customCue" placeholder="Cue number, e.g. 12" autocomplete="off">
+        <button class="btn small resume" id="customFire">Fire</button>
+      </div>
+
+      <div class="hint">
+        <kbd>Space</kbd> GO &nbsp; <kbd>P</kbd> pause &nbsp; <kbd>R</kbd> resume<br>
+        <kbd>S</kbd> speaker mode &nbsp; <kbd>Esc</kbd> stop all
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ============ SETTINGS ============ -->
+<dialog id="settings">
+  <div class="panel-head">Connection Settings</div>
+  <div class="panel-body">
+    <div class="field">
+      <label for="bridgeUrl">Bridge address (the computer running bridge.js)</label>
+      <input id="bridgeUrl" placeholder="http://localhost:8080">
+    </div>
+    <div class="field">
+      <label class="row"><input type="checkbox" id="simMode"> Simulation mode (log only, nothing sent to QLab)</label>
+    </div>
+    <div class="row" style="justify-content:flex-end">
+      <button class="btn small" id="testBtn">Test connection</button>
+      <button class="btn small resume" id="saveSettings">Save</button>
+    </div>
+  </div>
+</dialog>
+
+<script>
+/* =====================================================================
+   1. CONFIGURATION — edit this section to match your QLab workspace
+   ===================================================================== */
+
+// Run of show. "cue" = the QLab cue NUMBER that starts that segment.
+const SHOW = [
+  { time: "7:00", title: "Welcome Speech",                         type: "speech",   mins: 2,  cue: "1" },
+  { time: "7:03", title: "Opening Performance",                    type: "perform",  mins: 5,  cue: "2",  photo: true },
+  { time: "7:08", title: "Induction Ceremony & Pledge",            type: "ceremony", mins: 7,  cue: "3",  photo: true },
+  { time: "7:15", title: "Opera Performance",                      type: "perform",  mins: 5,  cue: "4",  photo: true },
+  { time: "7:20", title: "Bronze Certificates",                    type: "award",    mins: 5,  cue: "5",  photo: true },
+  { time: "7:25", title: "Duologue – Hard Candy",                  type: "perform",  mins: 5,  cue: "6" },
+  { time: "7:30", title: "Silver Certificates",                    type: "award",    mins: 5,  cue: "7",  photo: true },
+  { time: "7:35", title: "Group Scene – Buried Child",             type: "perform",  mins: 5,  cue: "8",  photo: true },
+  { time: "7:40", title: "Gold Certificates",                      type: "award",    mins: 5,  cue: "9",  photo: true },
+  { time: "7:45", title: "Musical Theatre Duo",                    type: "perform",  mins: 5,  cue: "10", photo: true },
+  { time: "7:50", title: "Diamond Certificate",                    type: "award",    mins: 3,  cue: "11", photo: true },
+  { time: "7:53", title: "Special Recognition Awards 25-26",       type: "award",    mins: 5,  cue: "12", photo: true },
+  { time: "8:00", title: "\"Rise A Long Life Thespian\" Alumni Video", type: "video", mins: 5,  cue: "13" },
+  { time: "8:05", title: "Knighting Ceremony – Senior Honors",     type: "ceremony", mins: 10, cue: "14" },
+  { time: "8:15", title: "Musical Theater Song – Hamilton",        type: "perform",  mins: 5,  cue: "15", photo: true },
+  { time: "8:20", title: "Thank You, Troupe Photos & Dismissal",   type: "speech",   mins: 3,  cue: "16", photo: true },
+];
+
+// QLab cue numbers for the side buttons. Create these cues in QLab
+// (e.g. a Light cue named SPOT-ON) and type the same number here.
+const CUES = {
+  spotOn:    "SPOT-ON",
+  spotOff:   "SPOT-OFF",
+  micOn:     "MIC-ON",
+  micOff:    "MIC-OFF",
+  houseUp:   "HOUSE-UP",
+  houseDown: "HOUSE-DOWN",
+};
+
+// OSC messages for the transport buttons (QLab workspace-level commands).
+const OSC = {
+  go:       "/go",
+  pause:    "/pause",
+  resume:   "/resume",
+  stop:     "/stop",
+  playhead: (cue) => `/playhead/${cue}`,
+  start:    (cue) => `/cue/${cue}/start`,
+};
+
+const TYPE_LABEL = { speech: "Speech", perform: "Performance", award: "Award", video: "Video", ceremony: "Ceremony" };
+
+/* =====================================================================
+   2. STATE
+   ===================================================================== */
+const state = {
+  liveIndex: -1,       // segment currently running
+  selected: 0,         // segment highlighted in the list
+  speakerMode: false,
+  showStart: null,
+  settings: { bridgeUrl: "http://localhost:8080", sim: true },
+};
+try {
+  const saved = JSON.parse(localStorage.getItem("stageControlSettings") || "null");
+  if (saved) Object.assign(state.settings, saved);
+} catch (e) { /* storage unavailable: use defaults */ }
+
+const $ = (id) => document.getElementById(id);
+
+/* =====================================================================
+   3. SENDING SIGNALS
+   The browser can't talk to QLab directly (QLab listens for OSC over
+   UDP/TCP). bridge.js receives these HTTP requests and forwards them
+   to QLab as OSC on port 53000.
+   ===================================================================== */
+async function send(address, label) {
+  log(label, address);
+  if (state.settings.sim) return true;
+  try {
+    const res = await fetch(state.settings.bridgeUrl.replace(/\/$/, "") + "/osc", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ address, args: [] }),
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    setConn("ok");
+    return true;
+  } catch (err) {
+    log("Send failed: " + err.message, address, true);
+    setConn("bad");
+    return false;
+  }
+}
+
+/* =====================================================================
+   4. ACTIONS
+   ===================================================================== */
+function go() {
+  if (!state.showStart) state.showStart = Date.now();
+  send(OSC.go, "GO");
+  state.liveIndex = Math.min(state.liveIndex + 1, SHOW.length - 1);
+  state.selected = Math.min(state.liveIndex + 1, SHOW.length - 1);
+  $("goBtn").classList.remove("flash"); void $("goBtn").offsetWidth; $("goBtn").classList.add("flash");
+  render();
+}
+function pauseAll()  { send(OSC.pause,  "Pause all"); }
+function resumeAll() { send(OSC.resume, "Resume all"); }
+function stopAll()   { send(OSC.stop,   "Stop all"); }
+
+function restartShow() {
+  if (!confirm("Restart the whole show? This stops everything and returns to the first cue.")) return;
+  send(OSC.stop, "Stop all");
+  send(OSC.playhead(SHOW[0].cue), "Playhead → first cue");
+  state.liveIndex = -1; state.selected = 0; state.showStart = null;
+  if (state.speakerMode) toggleSpeaker(false);
+  render();
+}
+
+function loadSelected() {
+  const seg = SHOW[state.selected];
+  send(OSC.playhead(seg.cue), "Load: " + seg.title);
+}
+function jumpAndGo() {
+  const seg = SHOW[state.selected];
+  if (!state.showStart) state.showStart = Date.now();
+  send(OSC.start(seg.cue), "Jump & GO: " + seg.title);
+  state.liveIndex = state.selected;
+  state.selected = Math.min(state.selected + 1, SHOW.length - 1);
+  render();
+}
+
+function fireCue(key, label) { send(OSC.start(CUES[key]), label); }
+
+// Speaker mode: one button to hold the show for a speaker, one to return.
+function toggleSpeaker(force) {
+  state.speakerMode = typeof force === "boolean" ? force : !state.speakerMode;
+  if (state.speakerMode) {
+    pauseAll();
+    fireCue("spotOn", "Podium spot ON");
+    fireCue("micOn", "Podium mic ON");
+  } else {
+    fireCue("micOff", "Podium mic OFF");
+    fireCue("spotOff", "Podium spot OFF");
+    resumeAll();
+  }
+  const b = $("interruptBtn");
+  b.classList.toggle("on", state.speakerMode);
+  b.innerHTML = state.speakerMode
+    ? "✓ SPEAKER IS ON — RETURN TO SHOW<small>Mic off · Spot off · Resume show</small>"
+    : "🎤 SPEAKER TAKES THE PODIUM<small>Pauses show · Podium spot on · Mic on</small>";
+}
+
+/* =====================================================================
+   5. RENDERING
+   ===================================================================== */
+function render() {
+  $("ros").innerHTML = SHOW.map((s, i) => `
+    <li data-i="${i}" class="${i === state.liveIndex ? "live" : ""} ${i < state.liveIndex ? "done" : ""} ${i === state.selected ? "selected" : ""}">
+      <span class="time">${s.time}</span>
+      <div>
+        <div class="title">${s.title}</div>
+        <div class="meta">Cue ${s.cue} · ${s.mins} min${s.photo ? " · 📷 Photo" : ""}</div>
+      </div>
+      <span class="tag ${s.type}">${TYPE_LABEL[s.type]}</span>
+    </li>`).join("");
+  $("rosCount").textContent = `${Math.max(state.liveIndex + 1, 0)} / ${SHOW.length}`;
+
+  const now = SHOW[state.liveIndex];
+  const next = SHOW[state.liveIndex + 1];
+  $("nowTitle").textContent = now ? now.title : "Standing by";
+  $("nowSub").textContent   = now ? `${now.time} · Cue ${now.cue} · ${now.mins} min` : "Press GO to start the show";
+  $("nextTitle").textContent = next ? next.title : (now ? "End of show" : SHOW[0].title);
+  $("nextSub").textContent   = next ? `${next.time} · Cue ${next.cue}` : "";
+
+  const liveEl = document.querySelector(".ros li.live");
+  if (liveEl) liveEl.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+
+function log(label, address, isErr) {
+  const t = new Date().toLocaleTimeString([], { hour12: false });
+  const row = document.createElement("div");
+  row.innerHTML = `<span class="ts">${t}</span><span class="${isErr ? "err" : ""}">${label}</span><span class="addr">${address}</span>`;
+  $("log").prepend(row);
+}
+
+function setConn(status) {
+  const dot = $("connDot"), txt = $("connText");
+  dot.className = "dot";
+  if (state.settings.sim) { dot.classList.add("sim"); txt.textContent = "Simulation"; return; }
+  if (status === "ok")  { dot.classList.add("ok");  txt.textContent = "Connected"; }
+  else if (status === "bad") { dot.classList.add("bad"); txt.textContent = "No bridge"; }
+  else { txt.textContent = "Checking…"; }
+}
+
+async function checkBridge() {
+  if (state.settings.sim) return setConn();
+  try {
+    const r = await fetch(state.settings.bridgeUrl.replace(/\/$/, "") + "/health");
+    setConn(r.ok ? "ok" : "bad");
+  } catch { setConn("bad"); }
+}
+
+function tick() {
+  $("clock").textContent = new Date().toLocaleTimeString([], { hour12: false });
+  if (state.showStart) {
+    const s = Math.floor((Date.now() - state.showStart) / 1000);
+    $("elapsed").textContent = `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+  } else $("elapsed").textContent = "00:00";
+}
+
+/* =====================================================================
+   6. WIRING
+   ===================================================================== */
+$("goBtn").onclick = go;
+$("pauseBtn").onclick = pauseAll;
+$("resumeBtn").onclick = resumeAll;
+$("stopBtn").onclick = stopAll;
+$("restartBtn").onclick = restartShow;
+$("loadBtn").onclick = loadSelected;
+$("jumpGoBtn").onclick = jumpAndGo;
+$("interruptBtn").onclick = () => toggleSpeaker();
+$("spotOn").onclick   = () => fireCue("spotOn", "Podium spot ON");
+$("spotOff").onclick  = () => fireCue("spotOff", "Podium spot OFF");
+$("micOn").onclick    = () => fireCue("micOn", "Podium mic ON");
+$("micOff").onclick   = () => fireCue("micOff", "Podium mic OFF");
+$("houseUp").onclick  = () => fireCue("houseUp", "House lights UP");
+$("houseDown").onclick= () => fireCue("houseDown", "House lights DOWN");
+$("customFire").onclick = () => {
+  const c = $("customCue").value.trim();
+  if (c) send(OSC.start(c), "Fire cue " + c);
+};
+$("customCue").addEventListener("keydown", (e) => { if (e.key === "Enter") $("customFire").click(); });
+$("clearLog").onclick = () => { $("log").innerHTML = ""; };
+$("ros").addEventListener("click", (e) => {
+  const li = e.target.closest("li"); if (!li) return;
+  state.selected = +li.dataset.i; render();
+});
+
+// Settings
+$("settingsBtn").onclick = () => {
+  $("bridgeUrl").value = state.settings.bridgeUrl;
+  $("simMode").checked = state.settings.sim;
+  $("settings").showModal();
+};
+$("saveSettings").onclick = () => {
+  state.settings.bridgeUrl = $("bridgeUrl").value.trim() || "http://localhost:8080";
+  state.settings.sim = $("simMode").checked;
+  try { localStorage.setItem("stageControlSettings", JSON.stringify(state.settings)); } catch (e) {}
+  $("settings").close();
+  log(state.settings.sim ? "Simulation mode ON" : "Live mode → " + state.settings.bridgeUrl, "—");
+  checkBridge();
+};
+$("testBtn").onclick = async () => {
+  const prev = { ...state.settings };
+  state.settings.bridgeUrl = $("bridgeUrl").value.trim(); state.settings.sim = false;
+  await checkBridge();
+  log($("connText").textContent === "Connected" ? "Bridge reachable ✓" : "Bridge not reachable", state.settings.bridgeUrl);
+  Object.assign(state.settings, prev); setConn();
+};
+
+// Keyboard shortcuts (ignored while typing in a box)
+document.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT" || $("settings").open) return;
+  const k = e.key.toLowerCase();
+  if (k === " ")      { e.preventDefault(); go(); }
+  else if (k === "p") pauseAll();
+  else if (k === "r") resumeAll();
+  else if (k === "s") toggleSpeaker();
+  else if (k === "escape") stopAll();
+});
+
+render();
+tick(); setInterval(tick, 1000);
+setConn(); checkBridge(); setInterval(checkBridge, 5000);
+log("Control panel ready" + (state.settings.sim ? " (simulation mode)" : ""), "—");
+</script>
+</body>
+</html>
